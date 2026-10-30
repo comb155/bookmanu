@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="阅读记录">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#4A90E2">
+    
+    <title>中小学语文课内外阅读记录表</title>
+    <!-- 引入 SheetJS 库，用于生成真正的 Excel 文件 -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary: #4A90E2;
+            --bg: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-main: #2c3e50;
+            --text-muted: #7f8c8d;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --border: #e0e6ed;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            padding: 15px;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .container { max-width: 1000px; margin: 0 auto; flex: 1; width: 100%; }
+
+        header { text-align: center; margin-bottom: 20px; }
+        h1 { color: var(--text-main); font-size: 22px; margin-bottom: 5px; }
+
+        /* 顶部：统计框 */
+        .stats-box {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+            border-left: 5px solid var(--primary);
+        }
+        .stat-item { display: flex; flex-direction: column; }
+        .stat-num { font-size: 20px; font-weight: bold; color: var(--primary); }
+        .stat-num.read { color: var(--success); }
+        .stat-num.unread { color: var(--warning); }
+        .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+        /* 添加书籍区域 */
+        .add-book-section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        }
+        .add-book-title { font-size: 15px; font-weight: bold; color: var(--primary); margin-bottom: 10px; }
+        .input-group { display: flex; gap: 10px; }
+        .input-group input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+        .input-group input:focus { border-color: var(--primary); }
+        .input-group button {
+            padding: 10px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* 操作按钮组 */
+        .global-actions {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 10px 12px; border: none; border-radius: 6px; cursor: pointer;
+            font-size: 13px; font-weight: bold; transition: all 0.3s;
+            display: inline-flex; align-items: center; gap: 5px;
+            justify-content: center; flex: 1; min-width: 105px;
+        }
+        .btn-excel { background-color: var(--primary); color: white; }
+        .btn-backup { background-color: #8e44ad; color: white; }
+        .btn-reset { background-color: var(--danger); color: white; }
+
+        /* 学段卡片 */
+        .stage-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+            margin-bottom: 20px;
+            overflow: hidden;
+            border-top: 5px solid var(--primary);
+        }
+        .stage-header { padding: 15px; background: #fafbfc; border-bottom: 1px solid var(--border); cursor: pointer; }
+        .stage-title-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .stage-title { font-size: 17px; font-weight: bold; color: var(--primary); display: flex; align-items: center; gap: 8px;}
+        .toggle-icon { font-size: 12px; color: var(--text-muted); transition: transform 0.3s; }
+        .stage-header.collapsed .toggle-icon { transform: rotate(-90deg); }
+
+        .stats-pill {
+            font-size: 12px; color: var(--text-muted); background: white;
+            padding: 4px 12px; border-radius: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .stats-pill span { font-weight: bold; color: var(--text-main); margin: 0 2px; }
+
+        .progress-bar-bg {
+            width: 100%; height: 8px; background: #e0e6ed;
+            border-radius: 4px; margin-top: 12px; overflow: hidden;
+        }
+        .progress-bar-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.3s ease; }
+        .stage-goal { margin-top: 12px; font-size: 13px; color: #555; background: #fff9e6; padding: 10px 12px; border-left: 4px solid var(--warning); border-radius: 0 4px 4px 0; }
+        .stage-goal strong { color: var(--warning); }
+
+        .stage-content { display: block; transition: max-height 0.3s ease-out; overflow: hidden; }
+        .stage-content.collapsed { display: none; }
+
+        .category-section { padding: 12px 15px; }
+        .category-title { font-size: 15px; font-weight: bold; color: #34495e; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dashed var(--border); }
+        .book-list { display: flex; flex-direction: column; gap: 2px; }
+
+        .book-item {
+            display: flex; align-items: center; padding: 10px 10px;
+            border-radius: 6px; transition: background 0.2s; cursor: pointer;
+            border-left: 3px solid transparent;
+        }
+        .book-item:active { background: #f0f4f8; }
+        .book-item input[type="checkbox"] {
+            margin-right: 12px; width: 20px; height: 20px;
+            cursor: pointer; accent-color: var(--success); flex-shrink: 0;
+        }
+        .book-title { font-size: 14.5px; color: #2c3e50; flex: 1; transition: color 0.2s; }
+        
+        /* 删除按钮 */
+        .btn-del {
+            background: none; border: none; color: var(--danger); 
+            font-size: 12px; padding: 4px 8px; cursor: pointer;
+            background-color: #fee; border-radius: 4px;
+        }
+
+        .book-item.checked { border-left-color: var(--success); background: #f0fff4; }
+        .book-item.checked .book-title { text-decoration: line-through; color: #bdc3c7; }
+
+        /* 自定义书单卡片特殊样式 */
+        .custom-card { border-top-color: #e67e22; }
+        .custom-card .stage-title { color: #e67e22; }
+
+        /* 颜色区分 */
+        .stage-1 { border-top-color: #27ae60; }
+        .stage-1 .stage-title { color: #27ae60; }
+        .stage-1 .progress-bar-fill { background: #27ae60; }
+
+        .stage-2 { border-top-color: #2980b9; }
+        .stage-2 .stage-title { color: #2980b9; }
+        .stage-2 .progress-bar-fill { background: #2980b9; }
+
+        .stage-3 { border-top-color: #d35400; }
+        .stage-3 .stage-title { color: #d35400; }
+        .stage-3 .progress-bar-fill { background: #d35400; }
+
+        .stage-4 { border-top-color: #8e44ad; }
+        .stage-4 .stage-title { color: #8e44ad; }
+        .stage-4 .progress-bar-fill { background: #8e44ad; }
+
+        .rabbit-footer { text-align: center; padding: 30px 0 15px 0; color: #7f8c8d; font-size: 14px; }
+        .rabbit-footer svg { margin-bottom: 8px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); transition: transform 0.3s ease; width: 80px; height: 80px; }
+        .rabbit-footer svg:active { transform: translateY(-5px); }
+        .rabbit-footer p { font-weight: bold; color: #5D6D7E; letter-spacing: 1px; }
+
+        #fileInput { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>📚 中小学语文阅读记录表</h1>
+        <p style="color: #7f8c8d; font-size: 13px;">勾选你的阅读进度，记录成长足迹</p>
+    </header>
+
+    <!-- 统计框 -->
+    <div class="stats-box">
+        <div class="stat-item">
+            <div class="stat-num" id="total-count">0</div>
+            <div class="stat-label">总计书目</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-num read" id="read-count">0</div>
+            <div class="stat-label">已读</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-num unread" id="unread-count">0</div>
+            <div class="stat-label">未读</div>
+        </div>
+    </div>
+
+    <!-- 添加书籍区 -->
+    <div class="add-book-section">
+        <div class="add-book-title">➕ 添加自定义书目</div>
+        <div class="input-group">
+            <input type="text" id="new-book-input" placeholder="输入书名或作者（如：《小王子》）" onkeypress="handleKeyPress(event)">
+            <button onclick="addCustomBook()">添加</button>
+        </div>
+    </div>
+
+    <!-- 操作按钮区 -->
+    <div class="global-actions">
+        <button class="btn btn-excel" onclick="downloadExcel()">📥 导 Excel</button>
+        <button class="btn btn-backup" onclick="backupData()">📤 备份数据</button>
+        <button class="btn btn-backup" style="background-color: #27ae60;" onclick="document.getElementById('fileInput').click()">📥 恢复数据</button>
+        <button class="btn btn-reset" onclick="resetProgress()">重置</button>
+        <input type="file" id="fileInput" accept=".json" onchange="restoreData(event)">
+    </div>
+
+    <div id="app"></div>
+</div>
+
+<div class="rabbit-footer">
+    <svg viewBox="0 0 120 120" width="90" height="90">
+        <ellipse cx="45" cy="30" rx="8" ry="25" fill="#ffd1dc" />
+        <ellipse cx="75" cy="30" rx="8" ry="25" fill="#ffd1dc" />
+        <circle cx="60" cy="65" r="25" fill="#fff0f5" />
+        <circle cx="42" cy="70" r="6" fill="#ffb6c1" opacity="0.6" />
+        <circle cx="78" cy="70" r="6" fill="#ffb6c1" opacity="0.6" />
+        <circle cx="50" cy="60" r="3" fill="#333" />
+        <circle cx="70" cy="60" r="3" fill="#333" />
+        <path d="M 55 70 Q 60 75 65 70" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round" />
+        <rect x="35" y="85" width="50" height="30" rx="3" fill="#4A90E2" />
+        <rect x="39" y="89" width="42" height="22" rx="2" fill="#fff" />
+        <line x1="60" y1="89" x2="60" y2="111" stroke="#e0e6ed" stroke-width="2" />
+    </svg>
+    <p>阅读兔兔 · 陪你翻开每一本好书</p>
+</div>
+
+<script>
+    // 基础书目数据结构
+    const baseReadingData = [
+        {
+            id: "stage1", className: "stage-1",
+            title: "第一学段（小学低年级 1-2年级）",
+            goal: "识字量有限，以形象思维为主。适合亲子共读和诵读。童话寓言建议选择注音版、插图版或绘本版，以短篇为主。",
+            categories: [
+                { name: "童谣与诗歌", books: ["中外童谣", "儿童诗歌"] },
+                { name: "童话", books: ["安徒生童话", "格林童话"] },
+                { name: "寓言", books: ["中国古今寓言", "《伊索寓言》"] },
+                { name: "故事", books: ["成语故事", "神话故事", "民间故事", "中外历史故事"] }
+            ]
+        },
+        {
+            id: "stage2", className: "stage-2",
+            title: "第二学段（小学中高年级 3-6年级）",
+            goal: "阅读能力向“通过阅读学习”过渡。可先阅读青少年改编版或原著，建议五年级以上开始阅读长篇，满足探索欲，培养科学精神。",
+            categories: [
+                { name: "童话与故事", books: ["叶圣陶《稻草人》", "张天翼《宝葫芦的秘密》", "《夏洛的网》", "曹文轩《草房子》"] },
+                { name: "长篇名著", books: ["吴承恩《西游记》", "斯威夫特《格列佛游记》", "高尔基《童年》"] },
+                { name: "科普科幻", books: ["《十万个为什么》", "儒勒·凡尔纳《海底两万里》"] },
+                { name: "诗歌散文", books: ["冰心《繁星·春水》"] }
+            ]
+        },
+        {
+            id: "stage3", className: "stage-3",
+            title: "第三学段（初中阶段 7-9年级）",
+            goal: "《朝花夕拾》《艾青诗选》等为初中语文教材指定必读名著，需精读。革命诗词适合结合历史背景进行爱国主义教育。建议购买权威出版社的无删减全本。",
+            categories: [
+                { name: "诗歌散文", books: ["鲁迅《朝花夕拾》", "《艾青诗选》", "方志敏《可爱的中国》", "《革命烈士诗抄》"] },
+                { name: "长篇名著", books: ["施耐庵《水浒传》", "老舍《骆驼祥子》", "罗广斌与杨益言《红岩》", "夏洛蒂·勃朗特《简·爱》", "奥斯特洛夫斯基《钢铁是怎样炼成的》"] },
+                { name: "纪实文学", books: ["埃德加·斯诺《红星照耀中国》"] }
+            ]
+        },
+        {
+            id: "stage4", className: "stage-4",
+            title: "普通高中（10-12年级）",
+            goal: "建议结合历史背景进行批注式精读，重点理解先秦诸子百家的思想内核。外国名著建议选择权威全译本。通过比较阅读，提升文学审美。",
+            categories: [
+                { name: "文化经典著作", books: ["《论语》", "《孟子》", "《老子》", "《庄子》", "《史记》"] },
+                { name: "诗歌精选", books: ["毛泽东诗词", "郭沫若/戴望舒/艾青等现代诗选", "外国经典诗歌（普希金/泰戈尔等）"] },
+                { name: "长篇与短篇小说", books: [
+                    "罗贯中《三国演义》", "曹雪芹《红楼梦》", "鲁迅《呐喊》《彷徨》", "茅盾《子夜》", "巴金《家》", "老舍《四世同堂》", "沈从文《边城》", "路遥《平凡的世界》",
+                    "塞万提斯《堂吉诃德》", "雨果《悲惨世界》", "狄更斯《大卫·科波菲尔》", "列夫·托尔斯泰《战争与和平》", "海明威《老人与海》", "莫泊桑/契诃夫/欧·亨利短篇小说"
+                ]},
+                { name: "散文与戏剧", books: ["朱自清/叶圣陶等现代散文精选", "关汉卿《窦娥冤》", "曹禺《雷雨》", "老舍《茶馆》", "莎士比亚《哈姆莱特》"] },
+                { name: "理论与其他", books: ["朱光潜《谈美书简》", "当代文学作品选", "科学与人文学科著作"] }
+            ]
+        }
+    ];
+
+    let customBooks = [];
+
+    // 初始化
+    function init() {
+        // 读取自定义书目
+        const savedCustom = localStorage.getItem('custom_books');
+        if (savedCustom) {
+            try { customBooks = JSON.parse(savedCustom); } catch(e) { customBooks = []; }
+        }
+        renderApp();
+    }
+
+    // 渲染主结构
+    function renderApp() {
+        const app = document.getElementById('app');
+        let html = '';
+
+        // 1. 渲染基础学段
+        baseReadingData.forEach(stage => {
+            let categoriesHtml = '';
+            stage.categories.forEach((cat, catIndex) => {
+                let booksHtml = '';
+                cat.books.forEach((bookText, bookIndex) => {
+                    const bookId = `${stage.id}_c${catIndex}_b${bookIndex}`;
+                    const savedState = localStorage.getItem(bookId) === 'true';
+                    booksHtml += createBookHtml(bookId, bookText, savedState, false);
+                });
+                categoriesHtml += `
+                    <div class="category-section">
+                        <div class="category-title">${cat.name}</div>
+                        <div class="book-list">${booksHtml}</div>
+                    </div>
+                `;
+            });
+
+            html += `
+                <div class="stage-card ${stage.className}" id="${stage.id}">
+                    <div class="stage-header" onclick="toggleStage('${stage.id}')">
+                        <div class="stage-title-row">
+                            <div class="stage-title"><span class="toggle-icon">▼</span> ${stage.title}</div>
+                            <div class="stats-pill" id="stats_${stage.id}">已读 <span>0</span> / 未读 <span>0</span> / 总计 <span>0</span></div>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="progress_${stage.id}"></div>
+                        </div>
+                        <div class="stage-goal">
+                            <strong>🎯 任务与目标：</strong> ${stage.goal}
+                        </div>
+                    </div>
+                    <div class="stage-content" id="content_${stage.id}">
+                        ${categoriesHtml}
+                    </div>
+                </div>
+            `;
+        });
+
+        // 2. 渲染自定义书单区
+        html += `
+            <div class="stage-card custom-card" id="custom_stage">
+                <div class="stage-header" onclick="toggleStage('custom_stage')">
+                    <div class="stage-title-row">
+                        <div class="stage-title"><span class="toggle-icon">▼</span> 我的自定义书单</div>
+                        <div class="stats-pill" id="stats_custom_stage">已读 <span>0</span> / 未读 <span>0</span> / 总计 <span>0</span></div>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="progress_custom_stage"></div>
+                    </div>
+                </div>
+                <div class="stage-content" id="content_custom_stage">
+                    <div class="category-section" id="custom_books_list">
+                        <!-- 动态插入自定义书目 -->
+                        ${customBooks.length === 0 ? '<div style="text-align:center; padding: 20px; color:#999; font-size:14px;">暂无自定义书目，请在上方添加</div>' : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        app.innerHTML = html;
+
+        // 渲染自定义列表内容
+        if (customBooks.length > 0) {
+            let customHtml = '';
+            customBooks.forEach((book, index) => {
+                const bookId = `custom_b${index}`;
+                const savedState = localStorage.getItem(bookId) === 'true';
+                customHtml += createBookHtml(bookId, book, savedState, true);
+            });
+            document.getElementById('custom_books_list').innerHTML = customHtml;
+        }
+
+        updateAllStats();
+    }
+
+    // 生成单本书的HTML
+    function createBookHtml(bookId, bookText, isChecked, isCustom) {
+        const delBtn = isCustom ? `<button class="btn-del" onclick="deleteCustomBook(event, '${bookText}')">删除</button>` : '';
+        return `
+            <label class="book-item ${isChecked ? 'checked' : ''}" id="label_${bookId}">
+                <input type="checkbox" id="${bookId}" ${isChecked ? 'checked' : ''} onchange="toggleBook('${bookId}')">
+                <span class="book-title">${bookText}</span>
+                ${delBtn}
+            </label>
+        `;
+    }
+
+    // 添加自定义书目
+    function addCustomBook() {
+        const input = document.getElementById('new-book-input');
+        const bookName = input.value.trim();
+        if (bookName === '') { alert("请输入书名！"); return; }
+        
+        if (customBooks.includes(bookName)) {
+            alert("这本书已经在您的自定义书单里了！");
+            return;
+        }
+
+        customBooks.push(bookName);
+        localStorage.setItem('custom_books', JSON.stringify(customBooks));
+        input.value = '';
+        
+        renderApp(); // 重新渲染
+    }
+
+    // 回车快捷键添加
+    function handleKeyPress(e) {
+        if (e.key === 'Enter') addCustomBook();
+    }
+
+    // 删除自定义书目
+    function deleteCustomBook(event, bookName) {
+        event.preventDefault(); // 防止触发label的点击事件
+        if (!confirm(`确定要删除《${bookName}》吗？`)) return;
+
+        const index = customBooks.indexOf(bookName);
+        if (index > -1) {
+            // 清理 localStorage 记录
+            localStorage.removeItem(`custom_b${index}`);
+            
+            // 从数组中移除
+            customBooks.splice(index, 1);
+            localStorage.setItem('custom_books', JSON.stringify(customBooks));
+            
+            // 清理后续被打乱的本地记录（简单粗暴：重新读取所有状态）
+            renderApp();
+        }
+    }
+
+    // 折叠
+    function toggleStage(stageId) {
+        const content = document.getElementById(`content_${stageId}`);
+        const header = document.querySelector(`#${stageId} .stage-header`);
+        if (content.classList.contains('collapsed')) {
+            content.classList.remove('collapsed');
+            header.classList.remove('collapsed');
+        } else {
+            content.classList.add('collapsed');
+            header.classList.add('collapsed');
+        }
+    }
+
+    // 勾选
+    function toggleBook(bookId) {
+        const checkbox = document.getElementById(bookId);
+        const label = document.getElementById(`label_${bookId}`);
+        if (checkbox.checked) {
+            label.classList.add('checked');
+            localStorage.setItem(bookId, 'true');
+        } else {
+            label.classList.remove('checked');
+            localStorage.setItem(bookId, 'false');
+        }
+        updateAllStats();
+    }
+
+    // 全局与学段统计
+    function updateAllStats() {
+        let globalTotal = 0, globalRead = 0;
+
+        const stages = [...baseReadingData.map(s => s.id), 'custom_stage'];
+
+        stages.forEach(stageId => {
+            const el = document.getElementById(stageId);
+            if (!el) return;
+
+            const checkboxes = el.querySelectorAll('input[type="checkbox"]');
+            const total = checkboxes.length;
+            let read = 0;
+
+            checkboxes.forEach(cb => { if (cb.checked) read++; });
+
+            globalTotal += total;
+            globalRead += read;
+
+            const unread = total - read;
+            const pct = total === 0 ? 0 : Math.round((read / total) * 100);
+
+            const statsEl = document.getElementById(`stats_${stageId}`);
+            if (statsEl) statsEl.innerHTML = `已读 <span>${read}</span> / 未读 <span>${unread}</span> / 总计 <span>${total}</span>`;
+            
+            const progEl = document.getElementById(`progress_${stageId}`);
+            if (progEl) progEl.style.width = `${pct}%`;
+        });
+
+        // 更新最顶部的统计框
+        document.getElementById('total-count').textContent = globalTotal;
+        document.getElementById('read-count').textContent = globalRead;
+        document.getElementById('unread-count').textContent = globalTotal - globalRead;
+    }
+
+    function resetProgress() {
+        if (confirm("确定要清除所有打卡记录吗？（自定义书单会保留）")) {
+            baseReadingData.forEach(stage => {
+                stage.categories.forEach((cat, catIndex) => {
+                    cat.books.forEach((book, bookIndex) => {
+                        localStorage.removeItem(`${stage.id}_c${catIndex}_b${bookIndex}`);
+                    });
+                });
+            });
+            // 清除自定义的勾选状态
+            customBooks.forEach((b, i) => localStorage.removeItem(`custom_b${i}`));
+            location.reload();
+        }
+    }
+
+    // 导出 Excel
+    function downloadExcel() {
+        let exportData = [["学段与年级", "读物类别", "推荐书目", "阅读状态"]];
+        
+        // 基础书单
+        baseReadingData.forEach(stage => {
+            stage.categories.forEach((cat, catIndex) => {
+                cat.books.forEach((bookText, bookIndex) => {
+                    const bookId = `${stage.id}_c${catIndex}_b${bookIndex}`;
+                    const isRead = localStorage.getItem(bookId) === 'true';
+                    exportData.push([stage.title, cat.name, bookText, isRead ? "✅ 已读" : "❌ 未读"]);
+                });
+            });
+        });
+
+        // 自定义书单
+        customBooks.forEach((bookText, index) => {
+            const bookId = `custom_b${index}`;
+            const isRead = localStorage.getItem(bookId) === 'true';
+            exportData.push(["我的自定义书单", "自选读物", bookText, isRead ? "✅ 已读" : "❌ 未读"]);
+        });
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(exportData);
+        ws['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 45 }, { wch: 12 }];
+        XLSX.utils.book_append_sheet(wb, ws, "阅读记录");
+        XLSX.writeFile(wb, "阅读记录表_" + new Date().toLocaleDateString().replace(/\//g, "-") + ".xlsx");
+    }
+
+    // 备份
+    function backupData() {
+        const backup = {};
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            backup[key] = localStorage.getItem(key);
+        }
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup));
+        const a = document.createElement('a');
+        a.setAttribute("href", dataStr);
+        a.setAttribute("download", "阅读打卡备份_" + new Date().toLocaleDateString().replace(/\//g, "-") + ".json");
+        document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    // 恢复
+    function restoreData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                for (let key in data) localStorage.setItem(key, data[key]);
+                alert("数据恢复成功！"); location.reload();
+            } catch (err) { alert("文件格式错误！"); }
+        };
+        reader.readAsText(file);
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
